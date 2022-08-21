@@ -61,7 +61,7 @@ namespace ecs
 	public:
 		EntityManager() = default;
 		EntityManager(void(*onCreateEntity)(Entity&));
-		virtual ~EntityManager() = default;
+		virtual ~EntityManager();
 	public:
 		/* Begin of entities iterator */
 		iterator begin() noexcept { return iterator(_EntitiesBegin(), _EntitiesEnd(), this); };
@@ -89,6 +89,17 @@ namespace ecs
 		{
 			static const TypeID index = TypeInfo<Component>::ID();
 			m_Systems[index] = std::make_unique<System<Component>>(onCreate, onUpdate, onDestroy);
+		}
+		template<typename Component>
+		void OnUpdateSystem()
+		{
+			static const TypeID index = TypeInfo<Component>::ID();
+			if (HasComponentPool<Component>() && m_Systems.find(index) != m_Systems.end())
+			{
+				auto& components = static_cast<ComponentStorage<Component, EntityID>*>(m_Pools[index].get())->m_Components;
+				for (auto& component : components)
+					static_cast<System<Component>*>(m_Systems[index].get())->OnUpdate(*static_cast<Component*>(component.get()));
+			}
 		}
 		/* Return count of valid entities */
 		std::size_t EntitiesCount() const;
@@ -128,10 +139,12 @@ namespace ecs
 			const auto handle = EntityTraits<EntityID>::ToID(entity);
 			static const TypeID index = TypeInfo<Component>::ID();
 
-			auto& component = GetComponent<Component>(handle);
+			auto& component = GetComponent<Component>(entity);
 			if (m_Systems.find(index) != m_Systems.end())
-				static_cast<System<Component>*>(m_Systems[index].get())->OnDestroy(component);
-			static_cast<ComponentStorage<Component, EntityID>*>(m_Pools[index].get())->Remove(handle);
+				static_cast<ComponentStorage<Component, EntityID>*>(m_Pools[index].get())->Remove(handle, m_Systems[index].get());
+			else
+				static_cast<ComponentStorage<Component, EntityID>*>(m_Pools[index].get())->Remove(handle);
+			
 		}
 		/* Return true if entiti has give component */
 		template<typename Component>

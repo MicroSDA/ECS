@@ -6,6 +6,11 @@ ecs::EntityManager::EntityManager(void(*onCreateEntity)(Entity&))
 	m_OnEntityCreate = onCreateEntity;
 }
 
+ecs::EntityManager::~EntityManager()
+{
+	DestroyAllEntites();
+}
+
 ecs::Entity ecs::EntityManager::CreateEntity()
 {
 	EntityTraits<EntityID>::EntityType handle;
@@ -32,13 +37,8 @@ ecs::Entity ecs::EntityManager::CreateEntity()
 
 void ecs::EntityManager::DestroyAllEntites()
 {
-	for (const EntityID& entityId : *this)
-	{
-		if (IsValidEntity(entityId))
-		{
-			Entity entity(entityId, this); entity.Destroy();
-		}
-	}
+	for (auto& entity : *this)
+		DestroyEntity(entity);
 }
 
 void ecs::EntityManager::SetOnEntityCreate(void(*function)(Entity&))
@@ -67,9 +67,15 @@ void ecs::EntityManager::DestroyEntity(const EntityID& entity)
 	std::get<0>(m_Entities[handle]) = EntityTraits<EntityID>::EntityType(EntityTraits<EntityID>::ToIntegral(m_Destroyed) | (EntityTraits<EntityID>::ToIntegral(version) << EntityTraits<EntityID>::EntityShift));
 	m_Destroyed = EntityTraits<EntityID>::EntityType(entity);
 	/* Remove entity from all pools and destroy all related components */
-	for (auto position = m_Pools.size(); position; --position) {
-		if (auto& pData = m_Pools[position - 1]; pData && pData->Contains(handle)) {
-			pData->m_Destroy(handle, pData.get());
+	for (auto position = m_Pools.size(); position; --position)
+	{
+		if (auto& pData = m_Pools[position - 1]; pData && pData->Contains(handle)) 
+		{
+			auto system = m_Systems.find(pData->GetID());
+			if (system != m_Systems.end())
+				pData->m_Destroy(handle, pData.get(), system->second.get());
+			else
+				pData->m_Destroy(handle, pData.get(), nullptr);
 		}
 	}
 }
